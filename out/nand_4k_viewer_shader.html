@@ -273,7 +273,7 @@
 
     function updateTipWithLocal(p, clientX, clientY) {
       const a = Math.floor(offsetX + p.x * scale);
-      const b = Math.floor(offsetY + (canvas.height - 1 - p.y) * scale);
+      const b = Math.floor(offsetY + (canvas.height - p.y) * scale);
 
       if (a < 0 || b < 0 || a >= tableSize || b >= tableSize) {
         tip.style.display = "none";
@@ -309,12 +309,12 @@
       const pixels = `${renderPixelString("A", aUnsigned)}${renderPixelString(op, bUnsigned)}${renderPixelString("R", rUnsigned)}`;
       tip.innerHTML = `<pre style="margin:0">${body}</pre><div style="margin-top:2px">${pixels}</div>`;
       const sx1 = (a - offsetX) / scale;
-      const sy1 = (canvas.height - 1) - (b + 1 - offsetY) / scale;
+      const sy1 = canvas.height - (b + 1 - offsetY) / scale;
       const sx2 = (a + 1 - offsetX) / scale;
-      const sy2 = (canvas.height - 1) - (b - offsetY) / scale;
+      const sy2 = canvas.height - (b - offsetY) / scale;
       if (!rect) rect = canvas.getBoundingClientRect();
-      const scaleX = rect.width / Math.max(1, canvas.width - 1);
-      const scaleY = rect.height / Math.max(1, canvas.height - 1);
+      const scaleX = rect.width / Math.max(1, canvas.width);
+      const scaleY = rect.height / Math.max(1, canvas.height);
       const left = rect.left + sx1 * scaleX;
       const top = rect.top + sy1 * scaleY;
       const width = Math.max(1, (sx2 - sx1) * scaleX);
@@ -344,7 +344,7 @@
     if (!gl) {
       throw new Error("WebGL not supported");
     }
-    let fitScale = (tableSize - 1) / Math.max(1, canvas.width - 1);
+    let fitScale = tableSize / Math.max(1, canvas.width);
     let minScale = Math.max(1e-5, fitScale / 1024);
     let maxScale = fitScale;
 
@@ -364,33 +364,23 @@
       uniform float u_size;
       uniform float u_bits;
       uniform int u_palette;
-      uniform float u_viewMinusOne;
 
       vec3 bitColor(float i, int palette, float sign) {
         int p = palette;
         vec3 base = vec3(0.0);
 
-        if (p == 0) {
-          if (i < 0.5) base = vec3(255.0, 32.0, 32.0) / 255.0;
-          if (i < 1.5) base = vec3(255.0, 96.0, 0.0) / 255.0;
-          if (i < 2.5) base = vec3(255.0, 168.0, 24.0) / 255.0;
-          if (i < 3.5) base = vec3(255.0, 255.0, 64.0) / 255.0;
-          if (i < 4.5) base = vec3(255.0, 96.0, 192.0) / 255.0;
-          if (i < 5.5) base = vec3(255.0, 32.0, 128.0) / 255.0;
-          if (i < 6.5) base = vec3(192.0, 0.0, 255.0) / 255.0;
-          if (i < 7.5) base = vec3(255.0, 255.0, 255.0) / 255.0;
-        } else if (p == 1) {
+        if (p == 1) {
           float t = (i + 1.0) / 8.0;
           base = vec3(t, t, t);
         } else {
           if (i < 0.5) base = vec3(255.0, 32.0, 32.0) / 255.0;
-          if (i < 1.5) base = vec3(255.0, 96.0, 0.0) / 255.0;
-          if (i < 2.5) base = vec3(255.0, 168.0, 24.0) / 255.0;
-          if (i < 3.5) base = vec3(255.0, 255.0, 64.0) / 255.0;
-          if (i < 4.5) base = vec3(255.0, 96.0, 192.0) / 255.0;
-          if (i < 5.5) base = vec3(255.0, 32.0, 128.0) / 255.0;
-          if (i < 6.5) base = vec3(192.0, 0.0, 255.0) / 255.0;
-          if (i < 7.5) base = vec3(255.0, 255.0, 255.0) / 255.0;
+          else if (i < 1.5) base = vec3(255.0, 96.0, 0.0) / 255.0;
+          else if (i < 2.5) base = vec3(255.0, 168.0, 24.0) / 255.0;
+          else if (i < 3.5) base = vec3(255.0, 255.0, 64.0) / 255.0;
+          else if (i < 4.5) base = vec3(255.0, 96.0, 192.0) / 255.0;
+          else if (i < 5.5) base = vec3(255.0, 32.0, 128.0) / 255.0;
+          else if (i < 6.5) base = vec3(192.0, 0.0, 255.0) / 255.0;
+          else base = vec3(255.0, 255.0, 255.0) / 255.0;
         }
 
         if (p >= 2) {
@@ -415,8 +405,8 @@
 
       void main() {
         vec2 p = gl_FragCoord.xy;
-      float srcX = floor(u_offset.x + p.x * u_scale);
-      float srcY = floor(u_offset.y + (u_viewMinusOne - p.y) * u_scale);
+        float srcX = floor(u_offset.x + p.x * u_scale);
+        float srcY = floor(u_offset.y + p.y * u_scale);
 
         if (srcX < 0.0 || srcY < 0.0 || srcX >= u_size || srcY >= u_size) {
           gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -531,7 +521,6 @@
     const uSize = gl.getUniformLocation(program, "u_size");
     const uBits = gl.getUniformLocation(program, "u_bits");
     const uPalette = gl.getUniformLocation(program, "u_palette");
-    const uViewMinusOne = gl.getUniformLocation(program, "u_viewMinusOne");
 
     let offsetX = 0;
     let offsetY = 0;
@@ -554,18 +543,18 @@
       canvas.style.width = `${px}px`;
       canvas.style.height = `${px}px`;
       rect = canvas.getBoundingClientRect();
-      fitScale = (tableSize - 1) / Math.max(1, canvas.width - 1);
+      fitScale = tableSize / Math.max(1, canvas.width);
       minScale = Math.max(1e-5, fitScale / 1024);
       maxScale = fitScale;
     }
 
     function clampOffsets() {
-      const spanX = (canvas.width - 1) * scale;
-      const spanY = (canvas.height - 1) * scale;
-      const minX = Math.min(0, tableSize - 1 - spanX);
-      const maxX = Math.max(0, tableSize - 1 - spanX);
-      const minY = Math.min(0, tableSize - 1 - spanY);
-      const maxY = Math.max(0, tableSize - 1 - spanY);
+      const spanX = canvas.width * scale;
+      const spanY = canvas.height * scale;
+      const minX = Math.min(0, tableSize - spanX);
+      const maxX = Math.max(0, tableSize - spanX);
+      const minY = Math.min(0, tableSize - spanY);
+      const maxY = Math.max(0, tableSize - spanY);
 
       if (offsetX < minX) offsetX = minX;
       if (offsetX > maxX) offsetX = maxX;
@@ -581,7 +570,6 @@
       gl.uniform1f(uSize, tableSize);
       gl.uniform1f(uBits, bits);
       gl.uniform1i(uPalette, Math.round(paletteIndex));
-      gl.uniform1f(uViewMinusOne, canvas.width - 1);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       status.textContent = `dim: ${tableSize}x${tableSize} op: ${operators[opIndex]} pan: (${offsetX.toFixed(2)}, ${offsetY.toFixed(2)}) zoom:${scale.toFixed(3)}`;
       refreshTip();
@@ -593,7 +581,7 @@
       mask = tableSize - 1;
       decimalWidth = String(tableSize - 1).length;
       hexWidth = 3 + bits / 4;
-      fitScale = (tableSize - 1) / Math.max(1, canvas.width - 1);
+      fitScale = tableSize / Math.max(1, canvas.width);
       minScale = Math.max(1e-5, fitScale / 1024);
       maxScale = fitScale;
       syncJumpControls();
@@ -617,10 +605,10 @@
       }
       const clampedA = Math.max(0, Math.min(mask, Math.floor(a)));
       const clampedB = Math.max(0, Math.min(mask, Math.floor(b)));
-      const cx = (canvas.width - 1) / 2;
-      const cy = (canvas.height - 1) / 2;
-      offsetX = clampedA - cx * scale;
-      offsetY = clampedB - (canvas.height - 1 - cy) * scale;
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      offsetX = clampedA + 0.5 - cx * scale;
+      offsetY = clampedB + 0.5 - (canvas.height - cy) * scale;
       clampOffsets();
       jumpAInput.value = String(clampedA);
       jumpBInput.value = String(clampedB);
@@ -710,8 +698,8 @@
     function fitAll() {
       layoutViewportCanvas();
       scale = fitScale;
-      offsetX = (tableSize - 1 - (canvas.width - 1) * scale) / 2;
-      offsetY = (tableSize - 1 - (canvas.height - 1) * scale) / 2;
+      offsetX = (tableSize - canvas.width * scale) / 2;
+      offsetY = (tableSize - canvas.height * scale) / 2;
       render();
     }
 
@@ -725,8 +713,8 @@
 
     function localPointerPos(event) {
       if (!rect) rect = canvas.getBoundingClientRect();
-      const sourceWidth = Math.max(1, canvas.width - 1);
-      const sourceHeight = Math.max(1, canvas.height - 1);
+      const sourceWidth = Math.max(1, canvas.width);
+      const sourceHeight = Math.max(1, canvas.height);
       return {
         x: (event.clientX - rect.left) * (sourceWidth / rect.width),
         y: (event.clientY - rect.top) * (sourceHeight / rect.height),
@@ -736,7 +724,7 @@
     function sourceFromPointer(pointer) {
       return {
         x: offsetX + pointer.x * scale,
-        y: offsetY + (canvas.height - 1 - pointer.y) * scale,
+        y: offsetY + (canvas.height - pointer.y) * scale,
       };
     }
 
@@ -786,7 +774,7 @@
       if (scale !== oldScale) {
         // Keep cursor-anchored data point stable while scaling.
         offsetX = sourceAtCursor.x - p.x * scale;
-        offsetY = sourceAtCursor.y - (canvas.height - 1 - p.y) * scale;
+        offsetY = sourceAtCursor.y - (canvas.height - p.y) * scale;
         render();
         updateTip(e);
       }
