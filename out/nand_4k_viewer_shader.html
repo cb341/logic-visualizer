@@ -39,6 +39,16 @@
     let decimalWidth = String(tableSize - 1).length;
     let hexWidth = 3 + bits / 4;
     let tipState = null;
+    const resultBitColors = [
+      "rgb(255, 32, 32)",
+      "rgb(255, 96, 0)",
+      "rgb(255, 168, 24)",
+      "rgb(255, 255, 64)",
+      "rgb(255, 96, 192)",
+      "rgb(255, 32, 128)",
+      "rgb(192, 0, 255)",
+      "rgb(255, 255, 255)",
+    ];
 
     function toBinary(v) {
       return (v & mask).toString(2).padStart(bits, "0");
@@ -52,6 +62,20 @@
 
     function toHex(v) {
       return (v & mask).toString(16).toUpperCase().padStart(bits / 4, "0");
+    }
+
+    function layerColor(bitIndex, isSet) {
+      return isSet ? resultBitColors[bitIndex % resultBitColors.length] : "#000000";
+    }
+
+    function renderResultLayerPixels(value) {
+      let out = "";
+      for (let bit = bits - 1; bit >= 0; bit--) {
+        const on = ((value >> bit) & 1) === 1;
+        const color = layerColor(bit, on);
+        out += `<span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:1px;border:1px solid rgba(0,0,0,0.5);" title='bit ${bit}: ${on ? "1" : "0"}'></span>`;
+      }
+      return out;
     }
 
     function opResult(a, b, opIndex) {
@@ -96,13 +120,16 @@
       const row = (left, bitText, dec, hex) => `${padLeft(left)} ${padBits(bitText)} ${padDec(dec)} ${padHex(hex)}`;
       const tableHeader = `${padLeft("op")} ${padBits("bin")} ${padDec("dec")} ${padHex("hex")}`;
       const dashLine = "-".repeat(5 + 1 + bits + 1 + decimalWidth + 1 + hexWidth);
-      tip.textContent = [
+      const body = [
         tableHeader,
         row("A", formatBits(aUnsigned), formatDec(aUnsigned), formatHex(aUnsigned)),
         row(op, formatBits(bUnsigned), formatDec(bUnsigned), formatHex(bUnsigned)),
         dashLine,
         row("R", formatBits(rUnsigned), formatDec(rUnsigned), formatHex(rUnsigned)),
+        "",
+        "Result pixel color from bits (set layer color, unset black):",
       ].join("\n");
+      tip.innerHTML = `<pre style="margin:0">${body}</pre><div>${renderResultLayerPixels(rUnsigned)}</div>`;
       const sx1 = (a - offsetX) / scale;
       const sy1 = (b - offsetY) / scale;
       const sx2 = (a + 1 - offsetX) / scale;
