@@ -1,0 +1,453 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Logical NAND 65k Viewport (WebGL)</title>
+</head>
+  <body style="margin:0;background:#111;color:#ddd;font-family:Arial,sans-serif;">
+  <div id="controls" style="padding:10px;">
+    <strong>Operation Table</strong>
+    <span id="status">op: NAND pan: (0,0) zoom:1</span>
+    <br/>
+    Drag to pan. Mouse wheel to zoom. Use arrow keys to switch ops (NAND, AND, NOR, OR, XOR, ADDA, ADDU, MUL, DIV). Click "Fit all" or press "F" to view entirety.
+    (fit all centers the image)
+    <label for="dimension">Image:</label>
+    <select id="dimension">
+      <option value="4">4x4</option>
+      <option value="8">8x8</option>
+      <option value="16" selected>16x16</option>
+    </select>
+    <button id="fit-all" type="button">Fit all</button>
+  </div>
+  <div id="tip" style="position:fixed; background:#111; color:#fff; border:1px solid #888; font-family:monospace; font-size:12px; padding:4px 8px; display:none; pointer-events:none; z-index:10; white-space:pre;"></div>
+  <div id="outline" style="position:fixed; border:1px solid #00ff00; box-sizing:border-box; pointer-events:none; z-index:9; display:none;"></div>
+  <canvas id="c" width="4096" height="4096" style="display:block; margin: 0 auto;"></canvas>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const status = document.getElementById("status");
+    const fitAllButton = document.getElementById("fit-all");
+    const controls = document.getElementById("controls");
+    const dimensionSelect = document.getElementById("dimension");
+    const tip = document.getElementById("tip");
+    const outline = document.getElementById("outline");
+    canvas.style.touchAction = "none";
+    const operators = ["NAND", "AND", "NOR", "OR", "XOR", "ADDA", "ADDU", "MUL", "DIV"];
+    let bits = 16;
+    let tableSize = 1 << bits;
+    let mask = tableSize - 1;
+    let decimalWidth = String(tableSize - 1).length;
+    let hexWidth = 3 + bits / 4;
+    let tipState = null;
+
+    function toBinary(v) {
+      return (v & mask).toString(2).padStart(bits, "0");
+    }
+
+    function toSigned(v) {
+      const sign = 1 << (bits - 1);
+      const n = v & mask;
+      return (n & sign) ? n - (1 << bits) : n;
+    }
+
+    function toHex(v) {
+      return (v & mask).toString(16).toUpperCase().padStart(bits / 4, "0");
+    }
+
+    function opResult(a, b, opIndex) {
+      if (opIndex === 0) return (~(a & b)) & mask;
+      if (opIndex === 1) return a & b;
+      if (opIndex === 2) return (~(a | b)) & mask;
+      if (opIndex === 3) return a | b;
+      if (opIndex === 4) return a ^ b;
+      if (opIndex === 5) return (toSigned(a) + toSigned(b)) & mask;
+      if (opIndex === 6) return (a + b) & mask;
+      if (opIndex === 7) return (a * b) & mask;
+      if (opIndex === 8) return b === 0 ? 0 : Math.floor(a / b) & mask;
+      return 0;
+    }
+
+    function opLabel(opIndex) {
+      return operators[opIndex];
+    }
+
+    function updateTipWithLocal(p, clientX, clientY) {
+      const a = Math.floor(offsetX + p.x * scale);
+      const b = Math.floor(offsetY + p.y * scale);
+
+      if (a < 0 || b < 0 || a >= tableSize || b >= tableSize) {
+        tip.style.display = "none";
+        outline.style.display = "none";
+        return;
+      }
+
+      const result = opResult(a, b, opIndex);
+      const aUnsigned = a & mask;
+      const bUnsigned = b & mask;
+      const rUnsigned = result & mask;
+      const formatBits = (v) => `${toBinary(v)}`;
+      const formatHex = (v) => `16#${toHex(v)}`;
+      const formatDec = (v) => `${(v >>> 0) & mask}`;
+      const op = opLabel(opIndex);
+      const padLeft = (text) => text.padEnd(5, " ");
+      const padBits = (text) => text.padEnd(bits, " ");
+      const padDec = (text) => text.padStart(decimalWidth, " ");
+      const padHex = (text) => text.padStart(hexWidth, " ");
+      const row = (left, bitText, dec, hex) => `${padLeft(left)} ${padBits(bitText)} ${padDec(dec)} ${padHex(hex)}`;
+      const tableHeader = `${padLeft("op")} ${padBits("bin")} ${padDec("dec")} ${padHex("hex")}`;
+      const dashLine = "-".repeat(5 + 1 + bits + 1 + decimalWidth + 1 + hexWidth);
+      tip.textContent = [
+        tableHeader,
+        row("A", formatBits(aUnsigned), formatDec(aUnsigned), formatHex(aUnsigned)),
+        row(op, formatBits(bUnsigned), formatDec(bUnsigned), formatHex(bUnsigned)),
+        dashLine,
+        row("R", formatBits(rUnsigned), formatDec(rUnsigned), formatHex(rUnsigned)),
+      ].join("\n");
+      const sx1 = (a - offsetX) / scale;
+      const sy1 = (b - offsetY) / scale;
+      const sx2 = (a + 1 - offsetX) / scale;
+      const sy2 = (b + 1 - offsetY) / scale;
+      if (!rect) rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width / canvas.width;
+      const scaleY = rect.height / canvas.height;
+      const left = rect.left + sx1 * scaleX;
+      const top = rect.top + sy1 * scaleY;
+      const width = Math.max(1, (sx2 - sx1) * scaleX);
+      const height = Math.max(1, (sy2 - sy1) * scaleY);
+      outline.style.left = `${left}px`;
+      outline.style.top = `${top}px`;
+      outline.style.width = `${width}px`;
+      outline.style.height = `${height}px`;
+      outline.style.display = "block";
+      tip.style.left = `${clientX + 12}px`;
+      tip.style.top = `${clientY + 12}px`;
+      tipState = { p, clientX, clientY };
+      tip.style.display = "block";
+    }
+
+    function updateTip(e) {
+      const p = localPointerPos(e);
+      updateTipWithLocal(p, e.clientX, e.clientY);
+    }
+
+    function refreshTip() {
+      if (!tipState) return;
+      updateTipWithLocal(tipState.p, tipState.clientX, tipState.clientY);
+    }
+
+    const gl = canvas.getContext("webgl");
+    if (!gl) {
+      throw new Error("WebGL not supported");
+    }
+    let fitScale = tableSize / canvas.width;
+    let minScale = Math.max(1e-5, fitScale / 1024);
+    let maxScale = fitScale;
+
+    const vertSrc = `
+      attribute vec2 a_position;
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }
+    `;
+
+    const fragSrc = `
+      precision highp float;
+
+      uniform vec2 u_offset;      // logical image coords at (0,0)
+      uniform float u_scale;      // source pixels per screen pixel
+      uniform float u_op;
+      uniform float u_size;
+      uniform float u_bits;
+
+      vec3 bitColor(float i) {
+        if (i < 0.5) return vec3(255.0, 32.0, 32.0) / 255.0;
+        if (i < 1.5) return vec3(255.0, 96.0, 0.0) / 255.0;
+        if (i < 2.5) return vec3(255.0, 168.0, 24.0) / 255.0;
+        if (i < 3.5) return vec3(255.0, 255.0, 64.0) / 255.0;
+        if (i < 4.5) return vec3(255.0, 96.0, 192.0) / 255.0;
+        if (i < 5.5) return vec3(255.0, 32.0, 128.0) / 255.0;
+        if (i < 6.5) return vec3(192.0, 0.0, 255.0) / 255.0;
+        return vec3(255.0, 255.0, 255.0) / 255.0;
+      }
+
+      float bit01(float value, float powerOfTwo) {
+        return mod(floor(value / powerOfTwo), 2.0);
+      }
+
+      float bitFromValue(float value, float powerOfTwo) {
+        return bit01(value, powerOfTwo);
+      }
+
+      float toSignedFloat(float value) {
+        float signLimit = pow(2.0, u_bits - 1.0);
+        float cycleLimit = pow(2.0, u_bits);
+        return value >= signLimit ? value - cycleLimit : value;
+      }
+
+      void main() {
+        vec2 p = gl_FragCoord.xy;
+        float srcX = floor(u_offset.x + p.x * u_scale);
+        float srcY = floor(u_offset.y + p.y * u_scale);
+
+        if (srcX < 0.0 || srcY < 0.0 || srcX >= u_size || srcY >= u_size) {
+          gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+          return;
+        }
+
+        vec3 c = vec3(0.0);
+        float op = u_op;
+        float result = 0.0;
+        float modValue = pow(2.0, u_bits);
+        float oneOverBits = 1.0 / u_bits;
+
+        if (op < 4.5) {
+          result = 0.0;
+        } else if (op < 5.5) {
+          result = toSignedFloat(srcX) + toSignedFloat(srcY);
+          result = mod(result + modValue, modValue);
+        } else if (op < 6.5) {
+          result = mod(srcX + srcY, u_size);
+        } else if (op < 7.5) {
+          result = mod(srcX * srcY, u_size);
+        } else {
+          result = (srcY < 1.0) ? 0.0 : mod(floor(srcX / srcY), u_size);
+        }
+
+        float pwr = 1.0;
+        for (float i = 0.0; i < 16.0; i += 1.0) {
+          float v = 0.0;
+          if (i < u_bits) {
+            float xb = bit01(srcX, pwr);
+            float yb = bit01(srcY, pwr);
+            if (op < 0.5) {
+              v = 1.0 - (xb * yb);
+            } else if (op < 1.5) {
+              v = xb * yb;
+            } else if (op < 2.5) {
+              v = 1.0 - min(1.0, xb + yb);
+            } else if (op < 3.5) {
+              v = min(1.0, xb + yb);
+            } else if (op < 4.5) {
+              v = abs(xb - yb);
+            } else {
+              v = bitFromValue(result, pwr);
+            }
+          }
+          c += bitColor(mod(i, 8.0)) * v * oneOverBits;
+          pwr = pwr * 2.0;
+        }
+
+        gl_FragColor = vec4(c, 1.0);
+      }
+    `;
+
+    function compile(type, source) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(s));
+      }
+      return s;
+    }
+
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vertSrc));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragSrc));
+    gl.linkProgram(program);
+
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(program));
+    }
+    gl.useProgram(program);
+
+    const posBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([
+        -1, -1,
+         1, -1,
+        -1,  1,
+        -1,  1,
+         1, -1,
+         1,  1,
+      ]),
+      gl.STATIC_DRAW,
+    );
+
+    const loc = gl.getAttribLocation(program, "a_position");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    const uOffset = gl.getUniformLocation(program, "u_offset");
+    const uScale = gl.getUniformLocation(program, "u_scale");
+    const uOp = gl.getUniformLocation(program, "u_op");
+    const uSize = gl.getUniformLocation(program, "u_size");
+    const uBits = gl.getUniformLocation(program, "u_bits");
+
+    let offsetX = 0;
+    let offsetY = 0;
+    let scale = fitScale;
+    let opIndex = 0;
+    const fitMargin = 12;
+
+    function layoutViewportCanvas() {
+      const controlsHeight = controls.getBoundingClientRect().height + fitMargin;
+      const viewportHeight = window.innerHeight - controlsHeight - fitMargin;
+      const viewportWidth = window.innerWidth - fitMargin * 2;
+      const target = Math.max(64, Math.min(viewportHeight, viewportWidth));
+      canvas.style.width = `${target}px`;
+      canvas.style.height = `${target}px`;
+      rect = canvas.getBoundingClientRect();
+    }
+
+    function clampOffsets() {
+      const spanX = canvas.width * scale;
+      const spanY = canvas.height * scale;
+      const minX = Math.min(0, tableSize - spanX);
+      const maxX = Math.max(0, tableSize - spanX);
+      const minY = Math.min(0, tableSize - spanY);
+      const maxY = Math.max(0, tableSize - spanY);
+
+      if (offsetX < minX) offsetX = minX;
+      if (offsetX > maxX) offsetX = maxX;
+      if (offsetY < minY) offsetY = minY;
+      if (offsetY > maxY) offsetY = maxY;
+    }
+
+    function render() {
+      clampOffsets();
+      gl.uniform2f(uOffset, offsetX, offsetY);
+      gl.uniform1f(uScale, scale);
+      gl.uniform1f(uOp, opIndex);
+      gl.uniform1f(uSize, tableSize);
+      gl.uniform1f(uBits, bits);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      status.textContent = `dim: ${tableSize}x${tableSize} op: ${operators[opIndex]} pan: (${offsetX.toFixed(2)}, ${offsetY.toFixed(2)}) zoom:${scale.toFixed(3)}`;
+      refreshTip();
+    }
+
+    function applyDimension(nextBits) {
+      bits = nextBits;
+      tableSize = 1 << bits;
+      mask = tableSize - 1;
+      decimalWidth = String(tableSize - 1).length;
+      hexWidth = 3 + bits / 4;
+      fitScale = tableSize / canvas.width;
+      minScale = Math.max(1e-5, fitScale / 1024);
+      maxScale = fitScale;
+      if (scale > fitScale) {
+        scale = fitScale;
+      }
+      fitAll();
+    }
+
+    function cycleOp(direction) {
+      opIndex = (opIndex + direction + operators.length) % operators.length;
+      render();
+    }
+
+    canvas.addEventListener("pointerleave", () => {
+      tip.style.display = "none";
+      outline.style.display = "none";
+      tipState = null;
+    });
+
+    function fitAll() {
+      layoutViewportCanvas();
+      scale = fitScale;
+      offsetX = (tableSize - canvas.width * scale) / 2;
+      offsetY = (tableSize - canvas.height * scale) / 2;
+      render();
+    }
+
+    render();
+
+    let dragging = false;
+    let lx = 0;
+    let ly = 0;
+    let rect = canvas.getBoundingClientRect();
+
+    function localPointerPos(event) {
+      if (!rect) rect = canvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 && e.button !== undefined) {
+        return;
+      }
+      rect = canvas.getBoundingClientRect();
+      dragging = true;
+      const p = localPointerPos(e);
+      lx = p.x;
+      ly = p.y;
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      const p = localPointerPos(e);
+      updateTip(e);
+      if (!dragging) return;
+      e.preventDefault();
+      const dx = p.x - lx;
+      const dy = p.y - ly;
+      offsetX -= dx * scale;
+      offsetY += dy * scale;
+      lx = p.x;
+      ly = p.y;
+      updateTip(e);
+      render();
+    });
+
+    canvas.addEventListener("pointerup", (e) => {
+      dragging = false;
+      canvas.releasePointerCapture?.(e.pointerId);
+    });
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      rect = canvas.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 0.8 : 1.25;
+      const p = localPointerPos(e);
+      const nx = p.x;
+      const ny = p.y;
+      const anchorX = offsetX + nx * scale;
+      const anchorY = offsetY + ny * scale;
+
+      const oldScale = scale;
+      scale = Math.max(minScale, Math.min(maxScale, scale * factor));
+      if (scale !== oldScale) {
+        // keep the pointer location stable while scaling
+        offsetX = anchorX - nx * scale;
+        offsetY = anchorY - ny * scale;
+        render();
+        updateTip(e);
+      }
+    }, { passive: false });
+
+    fitAllButton.addEventListener("click", fitAll);
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "f" || e.key === "F" || e.key === "0") {
+        fitAll();
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        cycleOp(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        cycleOp(1);
+      }
+    });
+
+    dimensionSelect.addEventListener("change", (e) => {
+      applyDimension(Number(e.target.value));
+    });
+  </script>
+</body>
+</html>
