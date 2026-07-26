@@ -4,9 +4,10 @@
   <meta charset="utf-8" />
   <title>Logical NAND 65k Viewport (WebGL)</title>
 </head>
-  <body style="margin:0;background:#111;color:#ddd;font-family:Arial,sans-serif;">
+<body style="margin:0;background:#111;color:#ddd;font-family:Arial,sans-serif;">
   <div id="controls" style="padding:10px;">
     <strong>Operation Table</strong>
+    <a href="https://github.com/cb341/logic-visualizer" target="_blank" rel="noopener noreferrer">GitHub</a>
     <span id="status">op: NAND pan: (0,0) zoom:1</span>
     <br/>
     Drag to pan. Mouse wheel to zoom. ArrowLeft/ArrowRight cycles operators.
@@ -15,8 +16,8 @@
     <label for="dimension">Image:</label>
     <select id="dimension">
       <option value="4">4x4</option>
-      <option value="8">8x8</option>
-      <option value="16" selected>16x16</option>
+      <option value="8" selected>8x8</option>
+      <option value="16">16x16</option>
     </select>
     <label for="palette">Palette:</label>
     <select id="palette">
@@ -51,7 +52,7 @@
     const outline = document.getElementById("outline");
     canvas.style.touchAction = "none";
     const operators = ["NAND", "AND", "NOR", "OR", "XOR", "ADDA", "ADDU", "MUL", "DIV", "LSHFT", "RSHFT", "CMP"];
-    let bits = 16;
+    let bits = 8;
     let tableSize = 1 << bits;
     let mask = tableSize - 1;
     let decimalWidth = String(tableSize - 1).length;
@@ -388,14 +389,23 @@
       throw new Error("WebGL not supported");
     }
     let fitScale = tableSize / Math.max(1, canvas.width);
-    let minScale = Math.max(1e-5, fitScale / 1024);
+    const minVisibleBits = 32;
+    let minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
     let maxScale = fitScale;
 
     function syncUrlState() {
       const params = new URLSearchParams(window.location.search);
+      const aValue = parseNumber(jumpAInput.value);
+      const bValue = parseNumber(jumpBInput.value);
+      const clampedA = Number.isFinite(aValue) ? Math.max(0, Math.min(mask, Math.floor(aValue))) : 0;
+      const clampedB = Number.isFinite(bValue) ? Math.max(0, Math.min(mask, Math.floor(bValue))) : 0;
+      jumpAInput.value = String(clampedA);
+      jumpBInput.value = String(clampedB);
       params.set("theme", String(paletteIndex));
       params.set("image", String(tableSize));
       params.set("op", String(opIndex));
+      params.set("a", String(clampedA));
+      params.set("b", String(clampedB));
       const next = `${window.location.pathname}?${params.toString()}`;
       window.history.replaceState({}, "", next);
     }
@@ -614,7 +624,7 @@
       canvas.style.height = `${px}px`;
       rect = canvas.getBoundingClientRect();
       fitScale = tableSize / Math.max(1, canvas.width);
-      minScale = Math.max(1e-5, fitScale / 1024);
+      minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
       maxScale = fitScale;
     }
 
@@ -652,7 +662,7 @@
       decimalWidth = String(tableSize - 1).length;
       hexWidth = 3 + bits / 4;
       fitScale = tableSize / Math.max(1, canvas.width);
-      minScale = Math.max(1e-5, fitScale / 1024);
+      minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
       maxScale = fitScale;
       syncJumpControls();
       if (scale > fitScale) {
@@ -688,6 +698,14 @@
       const clientY = rect.top + rect.height / 2;
       render();
       updateTipWithLocal({ x: cx, y: cy }, clientX, clientY);
+    }
+
+    function setJumpInputsFromSource(sourceX, sourceY) {
+      const a = Number.isFinite(sourceX) ? Math.floor(sourceX) : NaN;
+      const b = Number.isFinite(sourceY) ? Math.floor(sourceY) : NaN;
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+      jumpAInput.value = String(Math.max(0, Math.min(mask, a)));
+      jumpBInput.value = String(Math.max(0, Math.min(mask, b)));
     }
 
     function applyJumpFromParams() {
@@ -800,6 +818,7 @@
     let dragging = false;
     let lx = 0;
     let ly = 0;
+    let pointerStart = null;
 
     function localPointerPos(event) {
       if (!rect) rect = canvas.getBoundingClientRect();
@@ -827,6 +846,7 @@
       const p = localPointerPos(e);
       lx = p.x;
       ly = p.y;
+      pointerStart = { x: p.x, y: p.y };
       canvas.setPointerCapture(e.pointerId);
     });
 
@@ -849,6 +869,18 @@
 
     canvas.addEventListener("pointerup", (e) => {
       dragging = false;
+      const p = localPointerPos(e);
+      if (
+        pointerStart &&
+        Math.abs(p.x - pointerStart.x) < 4 &&
+        Math.abs(p.y - pointerStart.y) < 4
+      ) {
+        const source = sourceFromPointer(p);
+        setJumpInputsFromSource(source.x, source.y);
+        syncUrlState();
+        updateTip(e);
+      }
+      pointerStart = null;
       canvas.releasePointerCapture?.(e.pointerId);
     });
 
