@@ -32,6 +32,8 @@
     <input id="jump-b" type="number" min="0" value="0" style="width:90px;" />
     <button id="jump-to" type="button">Go</button>
     <button id="fit-all" type="button">Fit all</button>
+    <button id="zoom-in" type="button">Zoom in</button>
+    <button id="zoom-out" type="button">Zoom out</button>
     <button id="download-png" type="button">Download PNG</button>
   </div>
   <div id="tip" style="position:fixed; background:#111; color:#fff; border:1px solid #888; font-family:monospace; font-size:12px; padding:4px 8px; display:none; pointer-events:none; z-index:10; white-space:pre;"></div>
@@ -42,6 +44,8 @@
     const canvas = document.getElementById("c");
     const status = document.getElementById("status");
     const fitAllButton = document.getElementById("fit-all");
+    const zoomInButton = document.getElementById("zoom-in");
+    const zoomOutButton = document.getElementById("zoom-out");
     const downloadPngButton = document.getElementById("download-png");
     const controls = document.getElementById("controls");
     const dimensionSelect = document.getElementById("dimension");
@@ -60,6 +64,7 @@
     let decimalWidth = String(tableSize - 1).length;
     let hexWidth = 3 + bits / 4;
     let tipState = null;
+    let selectedCell = null;
     const palettes = [
       [
         [255, 32, 32],
@@ -329,7 +334,7 @@
       if (!Number.isFinite(currentB)) jumpBInput.value = "0";
     }
 
-    function updateTipWithLocal(p, clientX, clientY) {
+    function updateTipWithLocal(p, clientX, clientY, selected = false) {
       const a = Math.floor(offsetX + p.x * scale);
       const b = Math.floor(offsetY + (canvas.height - p.y) * scale);
 
@@ -381,11 +386,31 @@
       outline.style.top = `${Math.round(top)}px`;
       outline.style.width = `${Math.max(1, Math.round(width))}px`;
       outline.style.height = `${Math.max(1, Math.round(height))}px`;
+      outline.style.borderColor = selected ? "#ffb000" : "#00ff00";
       outline.style.display = "block";
       tip.style.left = `${clientX + 12}px`;
       tip.style.top = `${clientY + 12}px`;
-      tipState = { p, clientX, clientY };
+      tipState = selected ? null : { p, clientX, clientY };
       tip.style.display = "block";
+    }
+
+    function updateSelectedCell() {
+      if (!selectedCell) return;
+      const p = {
+        x: (selectedCell.a + 0.5 - offsetX) / scale,
+        y: canvas.height - (selectedCell.b + 0.5 - offsetY) / scale,
+      };
+      if (!rect) rect = canvas.getBoundingClientRect();
+      const clientX = rect.left + p.x * (rect.width / canvas.width);
+      const clientY = rect.top + p.y * (rect.height / canvas.height);
+      updateTipWithLocal(p, clientX, clientY, true);
+    }
+
+    function clearSelection() {
+      selectedCell = null;
+      tipState = null;
+      tip.style.display = "none";
+      outline.style.display = "none";
     }
 
     function updateTip(e) {
@@ -394,6 +419,10 @@
     }
 
     function refreshTip() {
+      if (selectedCell) {
+        updateSelectedCell();
+        return;
+      }
       if (!tipState) return;
       updateTipWithLocal(tipState.p, tipState.clientX, tipState.clientY);
     }
@@ -403,8 +432,8 @@
       throw new Error("WebGL not supported");
     }
     let fitScale = tableSize / Math.max(1, canvas.width);
-    const minVisibleBits = 32;
-    let minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
+    const minVisibleValues = () => Math.min(32, Math.max(4, tableSize / 4));
+    let minScale = Math.max(1e-5, Math.min(fitScale, minVisibleValues() / Math.max(1, canvas.width)));
     let maxScale = fitScale;
 
     function syncUrlState() {
@@ -638,7 +667,7 @@
       canvas.style.height = `${px}px`;
       rect = canvas.getBoundingClientRect();
       fitScale = tableSize / Math.max(1, canvas.width);
-      minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
+      minScale = Math.max(1e-5, Math.min(fitScale, minVisibleValues() / Math.max(1, canvas.width)));
       maxScale = fitScale;
     }
 
@@ -676,9 +705,10 @@
       decimalWidth = String(tableSize - 1).length;
       hexWidth = 3 + bits / 4;
       fitScale = tableSize / Math.max(1, canvas.width);
-      minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
+      minScale = Math.max(1e-5, Math.min(fitScale, minVisibleValues() / Math.max(1, canvas.width)));
       maxScale = fitScale;
       syncJumpControls();
+      clearSelection();
       downloadPngButton.disabled = ![4, 8].includes(bits);
       downloadPngButton.title = downloadPngButton.disabled
         ? "Full PNG download is available for 4x4 and 8x8 images"
@@ -712,13 +742,15 @@
       clampOffsets();
       jumpAInput.value = String(clampedA);
       jumpBInput.value = String(clampedB);
+      selectedCell = { a: clampedA, b: clampedB };
+      tipState = null;
       if (!rect) rect = canvas.getBoundingClientRect();
       const localX = (clampedA + 0.5 - offsetX) / scale;
       const localY = canvas.height - (clampedB + 0.5 - offsetY) / scale;
       const clientX = rect.left + localX * (rect.width / canvas.width);
       const clientY = rect.top + localY * (rect.height / canvas.height);
       render();
-      updateTipWithLocal({ x: localX, y: localY }, clientX, clientY);
+      updateTipWithLocal({ x: localX, y: localY }, clientX, clientY, true);
     }
 
     function downloadFullPng() {
@@ -852,6 +884,7 @@
     }
 
     canvas.addEventListener("pointerleave", () => {
+      if (selectedCell) return;
       tip.style.display = "none";
       outline.style.display = "none";
       tipState = null;
@@ -907,6 +940,7 @@
     canvas.addEventListener("pointermove", (e) => {
       const p = localPointerPos(e);
       if (!dragging) {
+        if (selectedCell) return;
         updateTip(e);
         return;
       }
@@ -930,19 +964,23 @@
         Math.abs(p.y - pointerStart.y) < 4
       ) {
         const source = sourceFromPointer(p);
-        setJumpInputsFromSource(source.x, source.y);
-        syncUrlState();
-        updateTip(e);
+        const a = Math.max(0, Math.min(mask, Math.floor(source.x)));
+        const b = Math.max(0, Math.min(mask, Math.floor(source.y)));
+        if (selectedCell && selectedCell.a === a && selectedCell.b === b) {
+          clearSelection();
+        } else {
+          selectedCell = { a, b };
+          tipState = null;
+          setJumpInputsFromSource(a, b);
+          syncUrlState();
+          updateSelectedCell();
+        }
       }
       pointerStart = null;
       canvas.releasePointerCapture?.(e.pointerId);
     });
 
-    canvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      rect = canvas.getBoundingClientRect();
-      const factor = e.deltaY < 0 ? 0.8 : 1.25;
-      const p = localPointerPos(e);
+    function zoomAt(factor, p) {
       const sourceAtCursor = sourceFromPointer(p);
 
       const oldScale = scale;
@@ -952,11 +990,24 @@
         offsetX = sourceAtCursor.x - p.x * scale;
         offsetY = sourceAtCursor.y - (canvas.height - p.y) * scale;
         render();
-        updateTip(e);
       }
+    }
+
+    function zoomAtCenter(factor) {
+      zoomAt(factor, { x: canvas.width / 2, y: canvas.height / 2 });
+    }
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      rect = canvas.getBoundingClientRect();
+      const p = localPointerPos(e);
+      zoomAt(e.deltaY < 0 ? 0.8 : 1.25, p);
+      if (!selectedCell) updateTip(e);
     }, { passive: false });
 
     fitAllButton.addEventListener("click", fitAll);
+    zoomInButton.addEventListener("click", () => zoomAtCenter(0.8));
+    zoomOutButton.addEventListener("click", () => zoomAtCenter(1.25));
     downloadPngButton.addEventListener("click", downloadFullPng);
 
     jumpButton.addEventListener("click", jumpFromInputs);
