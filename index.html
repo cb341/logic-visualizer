@@ -3,39 +3,77 @@
 <head>
   <meta charset="utf-8" />
   <title>Logical NAND 65k Viewport (WebGL)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #111; color: #ddd; font-family: Arial, sans-serif; }
+    #controls {
+      display: grid;
+      gap: 6px;
+      padding: 10px 12px;
+    }
+    .summary, .toolbar, .control-group {
+      display: flex;
+      align-items: center;
+    }
+    .summary { gap: 12px; }
+    .summary strong { color: #fff; font-size: 16px; }
+    .summary a { margin-left: auto; }
+    #status { color: #aaa; font: 12px monospace; }
+    .toolbar { gap: 16px; flex-wrap: wrap; }
+    .control-group {
+      gap: 6px;
+    }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    .hint { color: #888; font-size: 11px; }
+    #jump-a, #jump-b { width: 72px; }
+    @media (max-width: 700px) {
+      .summary { align-items: flex-start; flex-wrap: wrap; }
+      .summary a { margin-left: 0; }
+      #status { flex-basis: 100%; order: 3; }
+      .control-group { flex-wrap: wrap; }
+    }
+  </style>
 </head>
-<body style="margin:0;background:#111;color:#ddd;font-family:Arial,sans-serif;">
-  <div id="controls" style="padding:10px;">
-    <strong>Operation Table</strong>
-    <a href="https://github.com/cb341/logic-visualizer" target="_blank" rel="noopener noreferrer">GitHub</a>
-    <span id="status">op: NAND pan: (0,0) zoom:1</span>
-    <br/>
-    Drag to pan. Mouse wheel to zoom. ArrowLeft/ArrowRight cycles operators.
-    Press "F" or "0" to fit all.
-    Enter in jump inputs applies jump.
-    <label for="dimension">Image:</label>
-    <select id="dimension">
-      <option value="4">4x4</option>
-      <option value="8" selected>8x8</option>
-      <option value="16">16x16</option>
-    </select>
-    <label for="palette">Palette:</label>
-    <select id="palette">
-      <option value="0" selected>Vibrant</option>
-      <option value="1">Monochrome</option>
-      <option value="2">MSB Invert</option>
-      <option value="3">Nibble RGB</option>
-    </select>
-    <label for="jump-a">Jump:</label>
-    <input id="jump-a" type="number" min="0" value="0" style="width:90px;" />
-    <select id="jump-op"></select>
-    <input id="jump-b" type="number" min="0" value="0" style="width:90px;" />
-    <button id="jump-to" type="button">Go</button>
-    <button id="fit-all" type="button">Fit all</button>
-    <button id="zoom-in" type="button">Zoom in</button>
-    <button id="zoom-out" type="button">Zoom out</button>
-    <button id="download-png" type="button">Download PNG</button>
-  </div>
+<body>
+  <header id="controls">
+    <div class="summary">
+      <strong>Operation Table</strong>
+      <span id="status">op: NAND pan: (0,0) zoom:1</span>
+      <a href="https://github.com/cb341/logic-visualizer" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </div>
+    <div class="toolbar">
+      <div class="control-group">
+        <label for="dimension">Image</label>
+        <select id="dimension">
+          <option value="4">4x4</option>
+          <option value="8" selected>8x8</option>
+          <option value="16">16x16</option>
+        </select>
+        <label for="palette">Palette</label>
+        <select id="palette">
+          <option value="0" selected>Vibrant</option>
+          <option value="1">Monochrome</option>
+          <option value="2">MSB Invert</option>
+          <option value="3">Nibble RGB</option>
+        </select>
+        <button id="fit-all" type="button">Fit</button>
+        <button id="zoom-in" type="button" title="Zoom in">+</button>
+        <button id="zoom-out" type="button" title="Zoom out">−</button>
+      </div>
+      <div class="control-group">
+        <label for="jump-a">Jump</label>
+        <input id="jump-a" type="number" min="0" value="0" />
+        <select id="jump-op" aria-label="Operator"></select>
+        <input id="jump-b" type="number" min="0" value="0" />
+        <button id="jump-to" type="button">Go</button>
+      </div>
+      <div class="control-group">
+        <button id="download-png" type="button">Download PNG</button>
+      </div>
+    </div>
+    <div class="hint">Drag to pan · Wheel to zoom · Click a pixel to select · Arrow keys change operator · F or 0 fits all · Enter jumps</div>
+  </header>
   <div id="tip" style="position:fixed; background:#111; color:#fff; border:1px solid #888; font-family:monospace; font-size:12px; padding:4px 8px; display:none; pointer-events:none; z-index:10; white-space:pre;"></div>
   <div id="outline" style="position:fixed; border:1px solid #00ff00; box-sizing:border-box; pointer-events:none; z-index:9; display:none;"></div>
   <canvas id="c" width="4096" height="4096" style="display:block; margin: 0 auto;"></canvas>
