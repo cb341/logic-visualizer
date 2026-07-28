@@ -32,6 +32,7 @@
     <input id="jump-b" type="number" min="0" value="0" style="width:90px;" />
     <button id="jump-to" type="button">Go</button>
     <button id="fit-all" type="button">Fit all</button>
+    <button id="download-png" type="button">Download PNG</button>
   </div>
   <div id="tip" style="position:fixed; background:#111; color:#fff; border:1px solid #888; font-family:monospace; font-size:12px; padding:4px 8px; display:none; pointer-events:none; z-index:10; white-space:pre;"></div>
   <div id="outline" style="position:fixed; border:1px solid #00ff00; box-sizing:border-box; pointer-events:none; z-index:9; display:none;"></div>
@@ -41,6 +42,7 @@
     const canvas = document.getElementById("c");
     const status = document.getElementById("status");
     const fitAllButton = document.getElementById("fit-all");
+    const downloadPngButton = document.getElementById("download-png");
     const controls = document.getElementById("controls");
     const dimensionSelect = document.getElementById("dimension");
     const paletteSelect = document.getElementById("palette");
@@ -185,6 +187,18 @@
       const g = Math.max(0, Math.min(255, Math.round(out[1] * 255)));
       const b = Math.max(0, Math.min(255, Math.round(out[2] * 255)));
       return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function valuePixelRgb(value) {
+      const out = [0, 0, 0];
+      for (let bit = 0; bit < bits; bit++) {
+        if (((value >>> bit) & 1) === 0) continue;
+        const color = bitLayer(bit, value, true);
+        out[0] += color[0] / bits;
+        out[1] += color[1] / bits;
+        out[2] += color[2] / bits;
+      }
+      return out.map((channel) => Math.max(0, Math.min(255, Math.round(channel * 255))));
     }
 
     function renderResultLayerPixels(value) {
@@ -665,6 +679,10 @@
       minScale = Math.max(1e-5, Math.min(fitScale, minVisibleBits / Math.max(1, canvas.width)));
       maxScale = fitScale;
       syncJumpControls();
+      downloadPngButton.disabled = ![4, 8].includes(bits);
+      downloadPngButton.title = downloadPngButton.disabled
+        ? "Full PNG download is available for 4x4 and 8x8 images"
+        : `Download the complete ${tableSize}x${tableSize} operation table`;
       if (scale > fitScale) {
         scale = fitScale;
       }
@@ -686,6 +704,7 @@
       }
       const clampedA = Math.max(0, Math.min(mask, Math.floor(a)));
       const clampedB = Math.max(0, Math.min(mask, Math.floor(b)));
+      scale = minScale;
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
       offsetX = clampedA + 0.5 - cx * scale;
@@ -694,10 +713,45 @@
       jumpAInput.value = String(clampedA);
       jumpBInput.value = String(clampedB);
       if (!rect) rect = canvas.getBoundingClientRect();
-      const clientX = rect.left + rect.width / 2;
-      const clientY = rect.top + rect.height / 2;
+      const localX = (clampedA + 0.5 - offsetX) / scale;
+      const localY = canvas.height - (clampedB + 0.5 - offsetY) / scale;
+      const clientX = rect.left + localX * (rect.width / canvas.width);
+      const clientY = rect.top + localY * (rect.height / canvas.height);
       render();
-      updateTipWithLocal({ x: cx, y: cy }, clientX, clientY);
+      updateTipWithLocal({ x: localX, y: localY }, clientX, clientY);
+    }
+
+    function downloadFullPng() {
+      if (![4, 8].includes(bits)) return;
+
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = tableSize;
+      exportCanvas.height = tableSize;
+      const context = exportCanvas.getContext("2d");
+      const image = context.createImageData(tableSize, tableSize);
+
+      for (let y = 0; y < tableSize; y++) {
+        const b = tableSize - 1 - y;
+        for (let a = 0; a < tableSize; a++) {
+          const color = valuePixelRgb(opResult(a, b, opIndex));
+          const pixel = (y * tableSize + a) * 4;
+          image.data[pixel] = color[0];
+          image.data[pixel + 1] = color[1];
+          image.data[pixel + 2] = color[2];
+          image.data[pixel + 3] = 255;
+        }
+      }
+
+      context.putImageData(image, 0, 0);
+      exportCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `logic-${bits}x${bits}-${operators[opIndex].toLowerCase()}-palette-${paletteIndex}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }, "image/png");
     }
 
     function setJumpInputsFromSource(sourceX, sourceY) {
@@ -903,6 +957,7 @@
     }, { passive: false });
 
     fitAllButton.addEventListener("click", fitAll);
+    downloadPngButton.addEventListener("click", downloadFullPng);
 
     jumpButton.addEventListener("click", jumpFromInputs);
     const jumpByEnter = (event) => {
