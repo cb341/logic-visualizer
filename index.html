@@ -608,8 +608,20 @@
           result = 0.0;
         }
 
+        // The logical operations construct their output bit-by-bit below, so
+        // result remains zero for them. Derive their sign bit explicitly so
+        // MSB Invert uses the operation result for every operator.
+        float msbPower = pow(2.0, u_bits - 1.0);
+        float msbX = bit01(srcX, msbPower);
+        float msbY = bit01(srcY, msbPower);
+        float negative = step(msbPower, result);
+        if (op < 0.5) negative = 1.0 - (msbX * msbY);
+        else if (op < 1.5) negative = msbX * msbY;
+        else if (op < 2.5) negative = 1.0 - min(1.0, msbX + msbY);
+        else if (op < 3.5) negative = min(1.0, msbX + msbY);
+        else if (op < 4.5) negative = abs(msbX - msbY);
+
         float pwr = 1.0;
-        float negative = step(pow(2.0, u_bits - 1.0), result);
         for (float i = 0.0; i < 16.0; i += 1.0) {
           float v = 0.0;
           if (i < u_bits) {
