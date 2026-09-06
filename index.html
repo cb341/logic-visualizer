@@ -17,7 +17,7 @@
     }
     .summary { gap: 12px; }
     .summary strong { color: #fff; font-size: 16px; }
-    .summary a { margin-left: auto; }
+    .summary nav { margin-left: auto; display: flex; gap: 12px; }
     #status { color: #aaa; font: 12px monospace; }
     .toolbar { gap: 16px; flex-wrap: wrap; }
     .control-group {
@@ -29,7 +29,7 @@
     #jump-a, #jump-b { width: 72px; }
     @media (max-width: 700px) {
       .summary { align-items: flex-start; flex-wrap: wrap; }
-      .summary a { margin-left: 0; }
+      .summary nav { margin-left: 0; }
       #status { flex-basis: 100%; order: 3; }
       .control-group { flex-wrap: wrap; }
     }
@@ -40,7 +40,10 @@
     <div class="summary">
       <strong>Operation Table</strong>
       <span id="status">op: NAND pan: (0,0) zoom:1</span>
-      <a href="https://github.com/cb341/logic-visualizer" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <nav aria-label="Links">
+        <a href="table.html">All tables</a>
+        <a href="https://github.com/cb341/logic-visualizer" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
     </div>
     <div class="toolbar">
       <div class="control-group">
