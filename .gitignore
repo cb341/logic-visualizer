@@ -1,3 +1,5 @@
 **/*.png
 node_modules
-out
+out/*
+!out/8bit-tables/
+!out/8bit-tables/*.png
