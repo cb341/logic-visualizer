@@ -95,7 +95,7 @@
     const tip = document.getElementById("tip");
     const outline = document.getElementById("outline");
     canvas.style.touchAction = "none";
-    const operators = ["NAND", "AND", "NOR", "OR", "XOR", "ADDA", "ADDU", "MUL", "DIV", "LSHFT", "RSHFT", "CMP"];
+    const operators = ["NAND", "AND", "NOR", "OR", "XOR", "ADD", "MUL", "DIV", "LSHFT", "RSHFT", "CMP"];
     let bits = 8;
     let tableSize = 1 << bits;
     let mask = tableSize - 1;
@@ -266,13 +266,12 @@
       if (opIndex === 2) return (~(a | b)) & mask;
       if (opIndex === 3) return a | b;
       if (opIndex === 4) return a ^ b;
-      if (opIndex === 5) return (toSigned(a) + toSigned(b)) & mask;
-      if (opIndex === 6) return (a + b) & mask;
-      if (opIndex === 7) return (a * b) & mask;
-      if (opIndex === 8) return b === 0 ? 0 : Math.floor(a / b) & mask;
-      if (opIndex === 9) return (a << (b & (bits - 1))) & mask;
-      if (opIndex === 10) return (a >>> (b & (bits - 1))) & mask;
-      if (opIndex === 11) {
+      if (opIndex === 5) return (a + b) & mask;
+      if (opIndex === 6) return (a * b) & mask;
+      if (opIndex === 7) return b === 0 ? 0 : Math.floor(a / b) & mask;
+      if (opIndex === 8) return (a << (b & (bits - 1))) & mask;
+      if (opIndex === 9) return (a >>> (b & (bits - 1))) & mask;
+      if (opIndex === 10) {
         const eq = a === b ? 1 : 0;
         const lt = a < b ? 1 : 0;
         const gt = a > b ? 1 : 0;
@@ -313,10 +312,7 @@
         NOR: "NOR",
         OR: "OR",
         XOR: "XOR",
-        ADD: "ADDU",
-        ADD_UNSIGNED: "ADDU",
-        ADDA: "ADDA",
-        ADD_SIGNED: "ADDA",
+        ADD: "ADD",
         MUL: "MUL",
         MULT: "MUL",
         DIV: "DIV",
@@ -483,7 +479,7 @@
       jumpAInput.value = String(clampedA);
       jumpBInput.value = String(clampedB);
       params.set("theme", String(paletteIndex));
-      params.set("image", String(tableSize));
+      params.set("image", String(bits));
       params.set("op", String(opIndex));
       params.set("a", String(clampedA));
       params.set("b", String(clampedB));
@@ -558,12 +554,6 @@
         return bit01(value, powerOfTwo);
       }
 
-      float toSignedFloat(float value) {
-        float signLimit = pow(2.0, u_bits - 1.0);
-        float cycleLimit = pow(2.0, u_bits);
-        return value >= signLimit ? value - cycleLimit : value;
-      }
-
       void main() {
         vec2 p = gl_FragCoord.xy;
         float srcX = floor(u_offset.x + p.x * u_scale);
@@ -583,23 +573,20 @@
         if (op < 4.5) {
           result = 0.0;
         } else if (op < 5.5) {
-          result = toSignedFloat(srcX) + toSignedFloat(srcY);
-          result = mod(result + modValue, modValue);
-        } else if (op < 6.5) {
           result = mod(srcX + srcY, u_size);
-        } else if (op < 7.5) {
+        } else if (op < 6.5) {
           result = mod(srcX * srcY, u_size);
-        } else if (op < 8.5) {
+        } else if (op < 7.5) {
           result = (srcY < 1.0) ? 0.0 : mod(floor(srcX / srcY), u_size);
-        } else if (op < 9.5) {
+        } else if (op < 8.5) {
           float shift = mod(srcY, u_bits);
           result = mod(floor(srcX * pow(2.0, shift)), u_size);
-        } else if (op < 10.5) {
+        } else if (op < 9.5) {
           float shift = mod(srcY, u_bits);
           float factor = pow(2.0, -shift);
           result = floor(srcX * factor + 0.000001);
           result = mod(result, u_size);
-        } else if (op < 11.5) {
+        } else if (op < 10.5) {
           float eq = step(abs(srcX - srcY), 0.0);
           float lt = step(srcY, srcX - 1.0);
           float gt = step(srcX, srcY - 1.0);
@@ -866,7 +853,7 @@
         if ([4, 8, 16].includes(applyImage)) {
           if (Number(dimensionSelect.value) !== applyImage) {
             dimensionSelect.value = String(applyImage);
-            applyDimension(Math.round(Math.log2(applyImage)));
+            applyDimension(applyImage);
           }
         }
       } else if (Number.isFinite(applyDim)) {
