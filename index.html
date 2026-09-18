@@ -557,6 +557,17 @@
         return bit01(value, powerOfTwo);
       }
 
+      float divideFloor(float dividend, float divisor) {
+        if (divisor < 1.0) return 0.0;
+        float quotient = floor(dividend / divisor);
+        // GPU division can round across an integer boundary. For our 16-bit
+        // inputs these products are exact, so the remainder corrects either side.
+        float remainder = dividend - quotient * divisor;
+        if (remainder < 0.0) quotient -= 1.0;
+        else if (remainder >= divisor) quotient += 1.0;
+        return quotient;
+      }
+
       void main() {
         vec2 p = gl_FragCoord.xy;
         float srcX = floor(u_offset.x + p.x * u_scale);
@@ -580,7 +591,7 @@
         } else if (op < 6.5) {
           result = mod(srcX * srcY, u_size);
         } else if (op < 7.5) {
-          result = (srcY < 1.0) ? 0.0 : mod(floor(srcX / srcY), u_size);
+          result = divideFloor(srcX, srcY);
         } else if (op < 8.5) {
           float shift = mod(srcY, u_bits);
           result = mod(floor(srcX * pow(2.0, shift)), u_size);
